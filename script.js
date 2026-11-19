@@ -95,10 +95,36 @@
     }
     tasks.forEach((task) => {
       const item = document.createElement("li");
-      item.className = "task";
-      item.textContent = task.text;
+      item.className = task.done ? "task task--done done" : "task";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = task.done;
+      checkbox.setAttribute("aria-label", `Wykonane: ${task.text}`);
+      checkbox.addEventListener("change", () => toggleTask(task.id));
+      const label = document.createElement("span");
+      label.textContent = task.text;
+      label.tabIndex = 0;
+      label.setAttribute("role", "checkbox");
+      label.setAttribute("aria-checked", String(task.done));
+      label.addEventListener("click", () => toggleTask(task.id));
+      label.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggleTask(task.id);
+        }
+      });
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "delete";
+      deleteButton.textContent = "Usuń";
+      deleteButton.setAttribute("aria-label", `Usuń zadanie: ${task.text}`);
+      deleteButton.addEventListener("click", () => deleteTask(task.id));
+      item.appendChild(checkbox);
+      item.appendChild(label);
+      item.appendChild(deleteButton);
       taskList.appendChild(item);
     });
+    updateCounter();
   }
 
   // Pokazuje liczbę niewykonanych zadań i liczbę wszystkich zadań.
