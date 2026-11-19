@@ -21,7 +21,21 @@
   // Sprawdza treść, dodaje zadanie i przywraca fokus pola.
   function addTask() {
     const text = taskInput.value.trim();
-    if (!text) return;
+    if (!text) {
+      window.alert("Wpisz treść zadania!");
+      taskInput.focus();
+      return;
+    }
+    if (Array.from(text).length > 100) {
+      window.alert("Zadanie może mieć maksymalnie 100 znaków!");
+      taskInput.focus();
+      return;
+    }
+    if (tasks.some((task) => task.text.toLowerCase() === text.toLowerCase())) {
+      window.alert("Takie zadanie już istnieje!");
+      taskInput.focus();
+      return;
+    }
     const createdAt = getToday();
     // Kolejne dodania w tej samej milisekundzie otrzymują różne ID.
     let id = Date.now();
