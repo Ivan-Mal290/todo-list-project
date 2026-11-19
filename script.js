@@ -182,6 +182,14 @@
 
   // Łączy logikę z wymaganymi elementami HTML po załadowaniu dokumentu.
   function init() {
+    // Ujednolica nazwę widoczną w starszym interfejsie bez edycji pliku HTML.
+    document.title = "Lista zadań";
+    const footer = document.querySelector(".footer > p:last-child");
+    if (footer) footer.textContent = footer.textContent.replace("To-Do List", "Lista zadań");
+    const description = document.querySelector('meta[name="description"]');
+    if (description) {
+      description.setAttribute("content", "Prosta aplikacja do zarządzania codziennymi zadaniami");
+    }
     taskInput = document.getElementById("task-input") || document.getElementById("taskInput");
     taskList = document.getElementById("task-list") || document.getElementById("taskList");
     counter = document.getElementById("counter");
