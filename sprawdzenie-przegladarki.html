@@ -1,57 +1,185 @@
 <!doctype html>
-<html lang="pl"><meta charset="utf-8"><title>Sprawdzenie aplikacji</title>
-<p id="wynik">Sprawdzanie aplikacji…</p><iframe id="aplikacja" title="Aplikacja do sprawdzenia" style="width:900px;height:800px"></iframe>
+<html lang="pl">
+<meta charset="utf-8">
+<title>Bezpieczne sprawdzenie aplikacji</title>
+<h1>Sprawdzenie aplikacji bez zmiany danych użytkownika</h1>
+<p>Scenariusze działają w izolowanej ramce z pamięciowym magazynem danych. Nie odczytują ani nie zmieniają rzeczywistego localStorage.</p>
+<p>Umieść ten plik obok index.html, style.css i script.js. Jeśli przeglądarka blokuje odczyt plików lokalnych, wybierz te trzy pliki poniżej.</p>
+<input id="pliki" type="file" multiple accept=".html,.css,.js" aria-label="Pliki aplikacji do sprawdzenia">
+<button id="uruchom" type="button">Uruchom sprawdzenie</button>
+<p id="wynik" role="status">Sprawdzenie nie zostało uruchomione.</p>
+<iframe id="aplikacja" title="Izolowana aplikacja do sprawdzenia" sandbox="allow-scripts" style="width:900px;max-width:100%;height:800px"></iframe>
 <script>
-(async () => {
+(() => {
   const frame = document.getElementById('aplikacja');
-  const messages = [];
-  const errors = [];
-  let w;
-  let accept = true;
-  let checks = 0;
-  const check = (condition, name) => { if (!condition) throw Error(name); checks++; };
-  const load = () => new Promise(resolve => {
-    frame.onload = () => {
-      w = frame.contentWindow;
-      w.alert = message => messages.push(message);
-      w.confirm = () => accept;
-      w.addEventListener('error', event => errors.push(event.message));
-      resolve();
+  const result = document.getElementById('wynik');
+  const button = document.getElementById('uruchom');
+  const guardKey = 'niezalezne-dane-kontrolne';
+
+  // Odczytuje wyłącznie kod i wygląd aplikacji, bez jej uruchamiania.
+  function readFile(name) {
+    const selected = Array.from(document.getElementById('pliki').files).find(file => file.name === name);
+    if (selected) return selected.text();
+    return new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('GET', name);
+      request.onload = () => {
+        if ((request.status === 0 || request.status === 200) && request.responseText) resolve(request.responseText);
+        else reject(new Error('Nie można odczytać ' + name + '. Wybierz trzy pliki aplikacji.'));
+      };
+      request.onerror = () => reject(new Error('Przeglądarka blokuje pliki lokalne. Wybierz index.html, style.css i script.js.'));
+      request.send();
+    });
+  }
+
+  // Działa wewnątrz ramki z odrębnym pochodzeniem, zanim wystartuje aplikacja.
+  function prepare(config) {
+    window.addEventListener('error', event => {
+      parent.postMessage({ type: 'wynik-sprawdzenia', token: config.token, error: event.message }, '*');
+    });
+    const entries = new Map(Object.entries(config.seed));
+    const memory = Object.freeze({
+      get length() { return entries.size; },
+      key(index) { return Array.from(entries.keys())[index] ?? null; },
+      getItem(key) { return entries.get(String(key)) ?? null; },
+      setItem(key, value) { entries.set(String(key), String(value)); },
+      removeItem(key) { entries.delete(String(key)); },
+      clear() { entries.clear(); },
+    });
+    const context = { memory, messages: [], errors: [], accept: true, checks: 0, config };
+    window.__sprawdzenie = context;
+    // Brak allow-same-origin blokuje natywny magazyn i dostęp do dokumentu rodzica.
+    try {
+      void window.localStorage;
+      throw new Error('Natywny magazyn nie jest odizolowany.');
+    } catch (error) {
+      if (error.name !== 'SecurityError') throw error;
+    }
+    Object.defineProperty(window, 'localStorage', { value: memory, writable: false, configurable: false });
+    window.alert = message => context.messages.push(message);
+    window.confirm = () => context.accept;
+    window.addEventListener('error', event => context.errors.push(event.message));
+    window.addEventListener('unhandledrejection', event => context.errors.push(String(event.reason)));
+    context.check = (condition, name) => {
+      if (!condition) throw new Error(name);
+      context.checks++;
     };
-    frame.src = 'index.html?sprawdzenie=' + Math.random();
-  });
-  const data = () => JSON.parse(w.localStorage.getItem('todo-tasks'));
-  const rows = () => w.document.querySelectorAll('li.task');
-  const add = text => { w.document.getElementById('taskInput').value = text; w.document.querySelector('button[type=submit]').click(); };
-  await load();
-  w.localStorage.clear(); await load();
-  check(w.document.querySelector('li.empty').textContent === 'Brak zadań', 'Pusta lista');
-  check(w.document.getElementById('counter').textContent === 'Do zrobienia: 0 / Wszystkich: 0', 'Licznik pustej listy');
-  add('  '); check(messages.pop() === 'Wpisz treść zadania!', 'Pusta treść');
-  add('a'.repeat(101)); check(messages.pop().includes('100'), 'Limit długości');
-  add('  Kupić mleko  '); check(data()[0].text === 'Kupić mleko', 'Przycinanie białych znaków');
-  check(w.document.activeElement.id === 'taskInput', 'Fokus pola');
-  check(w.document.getElementById('taskInput').value === '', 'Czyszczenie pola');
-  add('KUPIĆ MLEKO'); check(data().length === 1, 'Duplikaty');
-  w.document.getElementById('taskInput').value = 'Drugie zadanie';
-  w.document.getElementById('taskInput').dispatchEvent(new w.KeyboardEvent('keydown', {key:'Enter',bubbles:true,cancelable:true}));
-  check(data().length === 2, 'Klawisz Enter');
-  add('a'.repeat(100)); check(data().length === 3, 'Dokładnie 100 znaków');
-  add('<img src=x onerror=alert(1)>'); check(w.document.querySelectorAll('#taskList img').length === 0, 'Bezpieczny tekst');
-  rows()[0].querySelector('span').click(); check(data()[0].done, 'Wykonanie kliknięciem tekstu');
-  check(rows()[0].classList.contains('task--done'), 'Klasa wykonania');
-  check(w.getComputedStyle(rows()[0].querySelector('span')).textDecorationLine === 'line-through', 'Przekreślenie z istniejącego CSS');
-  check(w.document.getElementById('counter').textContent === 'Do zrobienia: 3 / Wszystkich: 4', 'Licznik po zmianie');
-  await load(); check(data()[0].done && data().length === 4, 'Odczyt po ponownym otwarciu');
-  accept = false; rows()[0].querySelector('button').click(); check(data().length === 4, 'Anulowanie usuwania');
-  accept = true; const removed = data()[0].id; rows()[0].querySelector('button').click(); check(!data().some(t=>t.id===removed), 'Usuwanie według ID');
-  rows()[0].querySelector('input').click(); check(data()[0].done, 'Pole wyboru');
-  w.localStorage.setItem('todo-tasks', 'uszkodzone dane'); await load(); check(!!w.document.querySelector('li.empty'), 'Uszkodzony zapis');
-  w.localStorage.removeItem('todo-tasks'); w.localStorage.setItem('tasks', JSON.stringify([{text:'Starsze zadanie',done:true}]));
-  await load(); check(data()[0].text === 'Starsze zadanie' && data()[0].done, 'Przenoszenie starszych danych');
-  check(errors.length === 0, 'Brak błędów wykonania');
-  w.localStorage.clear(); await load();
-  add('Przygotować dokumentację'); add('Sprawdzić działanie aplikacji'); rows()[0].querySelector('span').click();
-  document.getElementById('wynik').textContent = 'WYNIK POZYTYWNY: ' + checks + ' sprawdzenia w rzeczywistym Chrome.';
-})().catch(error => { document.getElementById('wynik').textContent = 'BŁĄD: ' + error.message; });
-</script></html>
+    context.finish = error => {
+      parent.postMessage({ type: 'wynik-sprawdzenia', token: config.token,
+        error, checks: context.checks, storage: Object.fromEntries(entries) }, '*');
+    };
+  }
+
+  // Wykonuje jeden scenariusz i zawsze ogranicza czas oczekiwania na wynik.
+  function scenario(files, test, seed = {}, optionalButton = false) {
+    return new Promise((resolve, reject) => {
+      const token = String(Math.random()) + Date.now();
+      const receive = event => {
+        if (event.source !== frame.contentWindow || event.data?.type !== 'wynik-sprawdzenia' || event.data.token !== token) return;
+        cleanup();
+        if (event.data.error) reject(new Error(event.data.error));
+        else resolve(event.data);
+      };
+      const cleanup = () => { clearTimeout(timeout); window.removeEventListener('message', receive); };
+      const timeout = setTimeout(() => { cleanup(); reject(new Error('Przekroczono czas sprawdzenia.')); }, 10000);
+      window.addEventListener('message', receive);
+      try {
+        const doc = new DOMParser().parseFromString(files.html, 'text/html');
+        // Żaden oryginalny skrypt ani zewnętrzny zasób nie zostaje uruchomiony.
+        doc.querySelectorAll('script, link, base, iframe, object, embed, img, audio, video').forEach(node => node.remove());
+        const style = doc.createElement('style');
+        style.textContent = files.css;
+        doc.head.appendChild(style);
+        if (optionalButton) {
+          const clearButton = doc.createElement('button');
+          clearButton.id = 'clear-done-btn';
+          clearButton.textContent = 'Usuń wykonane';
+          doc.body.appendChild(clearButton);
+        }
+        const config = { token, seed: { [guardKey]: 'bez zmian', ...seed } };
+        const script = doc.createElement('script');
+        script.textContent = [
+          '(' + prepare.toString() + ')(' + JSON.stringify(config) + ');',
+          files.js,
+          `document.addEventListener('DOMContentLoaded', () => {
+            const c = window.__sprawdzenie;
+            try {
+              (${test.toString()})(c);
+              c.check(c.errors.length === 0, 'Brak błędów wykonania');
+              c.check(c.memory.getItem('niezalezne-dane-kontrolne') === 'bez zmian', 'Zachowanie niezależnych danych');
+              c.finish(null);
+            } catch (error) { c.finish(error.message); }
+          }, {once:true});`,
+        ].join('\n').replace(/<\/script/gi, '<\\/script');
+        doc.body.appendChild(script);
+        frame.srcdoc = '<!doctype html>\n' + doc.documentElement.outerHTML;
+      } catch (error) { cleanup(); reject(error); }
+    });
+  }
+
+  // Sprawdza FR-1–FR-7 na rzeczywistym DOM z pamięciowym odpowiednikiem Storage.
+  async function run() {
+    button.disabled = true;
+    result.textContent = 'Trwa bezpieczne sprawdzenie…';
+    try {
+      const [html, css, js] = await Promise.all(['index.html', 'style.css', 'script.js'].map(readFile));
+      const files = { html, css, js };
+      const first = await scenario(files, c => {
+        const check = c.check;
+        const input = document.getElementById('taskInput') || document.getElementById('task-input');
+        const addButton = document.getElementById('add-btn') || document.querySelector('button[type=submit]');
+        const data = () => JSON.parse(c.memory.getItem('todo-tasks'));
+        const add = text => { input.value = text; addButton.click(); };
+        check(document.querySelector('li.empty').textContent === 'Brak zadań', 'Pusta lista');
+        check(document.getElementById('counter').textContent === 'Do zrobienia: 0 / Wszystkich: 0', 'Początkowy licznik');
+        add('  '); check(c.messages.pop() === 'Wpisz treść zadania!', 'Pusta treść');
+        add('a'.repeat(101)); check(c.messages.pop().includes('100'), 'Limit długości');
+        add('  Kupić mleko  '); check(data()[0].text === 'Kupić mleko', 'Przycinanie treści');
+        check(document.activeElement === input && input.value === '', 'Fokus i czyszczenie pola');
+        add('KUPIĆ MLEKO'); check(data().length === 1, 'Duplikaty');
+        input.value = 'Drugie zadanie';
+        input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',bubbles:true,cancelable:true}));
+        check(data().length === 2, 'Klawisz Enter');
+        add('a'.repeat(100)); check(data().length === 3, 'Dokładnie 100 znaków');
+        add('<img src=x onerror=alert(1)>'); check(document.querySelectorAll('li img').length === 0, 'Bezpieczny tekst');
+        const row = document.querySelector('li.task');
+        row.querySelector('span').click();
+        check(data()[0].done, 'Wykonanie kliknięciem tekstu');
+        check(document.querySelector('li.task').classList.contains('task--done'), 'Klasa wykonania');
+        check(getComputedStyle(document.querySelector('li.task span')).textDecorationLine === 'line-through', 'Zgodność z CSS');
+        check(document.getElementById('counter').textContent === 'Do zrobienia: 3 / Wszystkich: 4', 'Licznik po zmianie');
+        check(localStorage === c.memory, 'Wyłącznie pamięciowy magazyn danych');
+        let parentBlocked = false;
+        try { void parent.document; } catch (error) { parentBlocked = error.name === 'SecurityError'; }
+        check(parentBlocked, 'Izolacja od dokumentu i danych rodzica');
+      });
+      const reopened = await scenario(files, c => {
+        const data = () => JSON.parse(c.memory.getItem('todo-tasks'));
+        const rows = () => document.querySelectorAll('li.task');
+        c.check(data()[0].done && rows().length === 4, 'Odczyt po ponownym uruchomieniu');
+        c.accept = false; rows()[0].querySelector('button').click(); c.check(data().length === 4, 'Anulowanie usuwania');
+        c.accept = true; const id = data()[0].id;
+        rows()[0].querySelector('button').click(); c.check(!data().some(task => task.id === id), 'Usuwanie według ID');
+        rows()[0].querySelector('input').click(); c.check(data()[0].done, 'Pole wyboru');
+        document.getElementById('clear-done-btn').click(); c.check(data().length === 2 && data().every(task => !task.done), 'Usuwanie wykonanych');
+      }, first.storage, true);
+      const corrupted = await scenario(files, c => {
+        c.check(!!document.querySelector('li.empty'), 'Uszkodzone dane nie przerywają działania');
+      }, { 'todo-tasks': 'uszkodzone dane' });
+      const migrated = await scenario(files, c => {
+        const tasks = JSON.parse(c.memory.getItem('todo-tasks'));
+        c.check(tasks[0].text === 'Starsze zadanie' && tasks[0].done, 'Przenoszenie starszych danych');
+      }, { tasks: JSON.stringify([{text:'Starsze zadanie',done:true}]) });
+      const total = first.checks + reopened.checks + corrupted.checks + migrated.checks;
+      result.textContent = 'WYNIK POZYTYWNY: ' + total + ' sprawdzeń. Rzeczywiste dane użytkownika pozostają bez zmian.';
+    } catch (error) {
+      result.textContent = 'BŁĄD: ' + error.message;
+    } finally {
+      button.disabled = false;
+    }
+  }
+  button.addEventListener('click', run);
+  if (new URLSearchParams(location.search).get('uruchom') === '1') run();
+})();
+</script>
+</html>

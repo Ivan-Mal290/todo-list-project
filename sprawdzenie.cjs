@@ -25,17 +25,22 @@ function boot(raw = null, options = {}) {
   const button = ids['add-btn'] || new Element();
   if (options.legacyHtml) { ids.taskForm.querySelector = () => button; ids.taskInput.form = ids.taskForm; }
   const alerts = [];
-  const storage = { value: raw, legacy: options.legacy ?? null, getItem(key) {
+  const entries = new Map([['niezalezne-dane-kontrolne', 'bez zmian']]);
+  if (raw !== null) entries.set('todo-tasks', raw);
+  if (options.legacy !== undefined) entries.set('tasks', options.legacy);
+  const storage = { get value() { return entries.get('todo-tasks') ?? null; }, getItem(key) {
     if (options.blockRead) throw Error('Odczyt zablokowany');
-    return key === 'todo-tasks' ? this.value : this.legacy;
+    return entries.get(String(key)) ?? null;
   }, setItem(key, value) {
     assert.equal(key, 'todo-tasks');
     if (options.blockWrite) throw Error('Zapis zablokowany');
-    this.value = value;
+    entries.set(String(key), String(value));
+    assert.equal(entries.get('niezalezne-dane-kontrolne'), 'bez zmian');
   } };
   const win = { alert: text => alerts.push(text), confirm: () => true };
   const document = { readyState: 'complete', querySelector: () => null, getElementById: id => ids[id] || null, createElement: () => new Element() };
-  vm.runInNewContext(source, { document, window: win, localStorage: storage });
+  const FixedDate = class extends Date { static now() { return 1716812345678; } };
+  vm.runInNewContext(source, { document, window: win, localStorage: storage, Date: FixedDate });
   return { ids, alerts, storage, win, input: ids[inputId], counter: ids.counter || ids[listId].after,
     add(text, enter = false) { ids[inputId].value = text; (enter ? ids[inputId] : button).fire(enter ? 'keydown' : 'click', {key: 'Enter'}); },
     rows: () => ids[listId].children, data: () => JSON.parse(storage.value) };
@@ -52,6 +57,8 @@ for (const legacyHtml of [false, true]) {
   assert.equal(app.data()[0].text, 'Kupić mleko');
   assert.equal(app.input.value, ''); assert.ok(app.input.focused);
   assert.equal(app.data().length, 2); assert.notEqual(app.data()[0].id, app.data()[1].id);
+  assert.equal(app.data()[0].id, 1716812345678);
+  assert.equal(app.data()[1].id, 1716812345679);
   app.add('KUPIĆ MLEKO'); assert.equal(app.data().length, 2);
   app.add('x'.repeat(100)); assert.equal(app.data().length, 3);
   app.add('<img src=x onerror=alert(1)>');
@@ -69,8 +76,15 @@ for (const legacyHtml of [false, true]) {
   reload.rows()[0].children[1].fire('keydown', {key: ' '}); assert.ok(!reload.data()[0].done);
   for (const raw of ['błędny JSON', '{}', 'null', '[null]', '[{"id":1}]', JSON.stringify([app.data()[0], app.data()[0]])]) assert.equal(boot(raw, {legacyHtml}).rows()[0].textContent, 'Brak zadań');
   assert.equal(boot(null, {legacyHtml, blockRead: true}).rows()[0].textContent, 'Brak zadań');
+  const invalidDate = {...app.data()[0], createdAt: '2026-02-30'};
+  assert.equal(boot(JSON.stringify([invalidDate]), {legacyHtml}).rows()[0].textContent, 'Brak zadań');
   const blocked = boot(null, {legacyHtml, blockWrite: true, noClear: true}); blocked.add('Próba'); assert.equal(blocked.rows()[0].children[1].textContent, 'Próba'); assert.match(blocked.alerts[0], /Nie udało/);
   const migrated = boot(null, {legacyHtml, legacy: JSON.stringify([{text: 'Starsze zadanie', done: true}])});
   assert.equal(migrated.data()[0].text, 'Starsze zadanie'); assert.ok(migrated.data()[0].done); assert.ok(Number.isSafeInteger(migrated.data()[0].id));
+  const canonical = boot(app.storage.value, {legacyHtml, legacy: JSON.stringify([{text:'Stare dane',done:false}])});
+  assert.equal(canonical.data()[0].text, 'Kupić mleko');
+  assert.equal(canonical.storage.getItem('niezalezne-dane-kontrolne'), 'bez zmian');
+  assert.equal(boot(null, {legacyHtml, legacy:'błędne dane'}).rows()[0].textContent, 'Brak zadań');
 }
 console.log('Wynik pozytywny: FR-1–FR-7, oba zestawy identyfikatorów HTML, granice długości, duplikaty, bezpieczny tekst, odczyt po ponownym uruchomieniu, błędne dane i przenoszenie starszych zadań.');
+
