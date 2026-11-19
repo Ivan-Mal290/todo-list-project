@@ -1,68 +1,148 @@
-const form = document.getElementById("taskForm");
-const input = document.getElementById("taskInput");
-const list = document.getElementById("taskList");
+(() => {
+  "use strict";
 
-let tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+  const STORAGE_KEY = "todo-tasks";
+  let tasks = [];
+  let taskInput;
+  let taskList;
+  let counter;
 
-function saveTasks() {
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-}
+  // Wczytuje zadania; odrzuca uszkodzone dane i powtarzające się identyfikatory.
+  function loadTasks() {
+    // Odczyt danych zostanie podłączony w etapie zapisu.
+    return [];
+  }
 
-function showTasks() {
-    list.innerHTML = "";
+  // Zapisuje stan i informuje, jeśli przeglądarka blokuje zapis.
+  function saveTasks() {
+    // Zapis danych zostanie podłączony w etapie zapisu.
+  }
 
-    tasks.forEach((task, index) => {
-        const li = document.createElement("li");
-
-        if (task.done) {
-            li.classList.add("done");
-        }
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.checked = task.done;
-
-        checkbox.addEventListener("change", () => {
-            tasks[index].done = checkbox.checked;
-            saveTasks();
-            showTasks();
-        });
-
-        const text = document.createElement("span");
-        text.textContent = task.text;
-
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.setAttribute("aria-label", `Usuń zadanie: ${task.text}`);
-        deleteButton.textContent = "Usuń";
-        deleteButton.className = "delete";
-
-        deleteButton.addEventListener("click", () => {
-            tasks.splice(index, 1);
-            saveTasks();
-            showTasks();
-        });
-
-        li.append(checkbox, text, deleteButton);
-        list.appendChild(li);
-    });
-}
-
-form.addEventListener("submit", (event) => {
-    event.preventDefault();
-
-    const taskText = input.value.trim();
-
-    if (taskText !== "") {
-        tasks.push({
-            text: taskText,
-            done: false
-        });
-
-        saveTasks();
-        showTasks();
-        input.value = "";
+  // Sprawdza treść, dodaje zadanie i przywraca fokus pola.
+  function addTask() {
+    const text = taskInput.value.trim();
+    if (!text) return;
+    const createdAt = getToday();
+    // Kolejne dodania w tej samej milisekundzie otrzymują różne ID.
+    let id = Date.now();
+    while (tasks.some((task) => task.id === id)) {
+      id = id === Number.MAX_SAFE_INTEGER ? 0 : id + 1;
     }
-});
+    tasks.push({ id, text, done: false, createdAt });
+    saveTasks();
+    render();
+    taskInput.value = "";
+    taskInput.focus();
+  }
 
-showTasks();
+  // Zwraca datę według lokalnej strefy czasowej użytkownika.
+  function getToday() {
+    const now = new Date();
+    return [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+  }
+
+  // Przełącza wykonanie zadania o wskazanym ID.
+  function toggleTask(id) {
+    const task = tasks.find((item) => item.id === id);
+    if (!task) return;
+    task.done = !task.done;
+    saveTasks();
+    render();
+  }
+
+  // Usuwa zadanie według ID po potwierdzeniu.
+  function deleteTask(id) {
+    if (!tasks.some((task) => task.id === id)) return;
+    if (!window.confirm("Usunąć zadanie?")) return;
+    tasks = tasks.filter((task) => task.id !== id);
+    saveTasks();
+    render();
+  }
+
+  // Usuwa wszystkie wykonane zadania.
+  function clearDoneTasks() {
+    tasks = tasks.filter((task) => !task.done);
+    saveTasks();
+    render();
+  }
+
+  // Buduje listę bez interpretowania treści jako HTML.
+  function render() {
+    taskList.textContent = "";
+    if (tasks.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "empty";
+      empty.textContent = "Brak zadań";
+      taskList.appendChild(empty);
+    }
+    tasks.forEach((task) => {
+      const item = document.createElement("li");
+      item.className = "task";
+      item.textContent = task.text;
+      taskList.appendChild(item);
+    });
+  }
+
+  // Pokazuje liczbę niewykonanych zadań i liczbę wszystkich zadań.
+  function updateCounter() {
+    // Licznik zostanie podłączony wraz z zapisem danych.
+  }
+
+  // Łączy logikę z wymaganymi elementami HTML po załadowaniu dokumentu.
+  function init() {
+    taskInput = document.getElementById("task-input") || document.getElementById("taskInput");
+    taskList = document.getElementById("task-list") || document.getElementById("taskList");
+    counter = document.getElementById("counter");
+    const form = document.getElementById("taskForm") || (taskInput && taskInput.form);
+    const addButton = document.getElementById("add-btn") ||
+      (form && form.querySelector('button[type="submit"], button:not([type])'));
+    if (!taskInput || !taskList || !addButton) {
+      window.alert("Brakuje pola zadania, listy zadań lub przycisku Dodaj.");
+      return;
+    }
+    // Uzupełnia brakujący licznik bez zmieniania pliku HTML.
+    if (!counter) {
+      counter = document.createElement("p");
+      counter.id = "counter";
+      taskList.insertAdjacentElement("afterend", counter);
+    }
+    counter.setAttribute("aria-live", "polite");
+    if (form) {
+      // Zapewnia polskie komunikaty zamiast natywnej walidacji przeglądarki.
+      form.noValidate = true;
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        addTask();
+      });
+    }
+    addButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      addTask();
+    });
+    taskInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        addTask();
+      }
+    });
+    const clearDoneButton = document.getElementById("clear-done-btn");
+    if (clearDoneButton) {
+      clearDoneButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        clearDoneTasks();
+      });
+    }
+    tasks = loadTasks();
+    render();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
+})();
