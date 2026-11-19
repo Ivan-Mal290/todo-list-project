@@ -213,3 +213,41 @@ li.done span {
     color: white;
     font-weight: 500;
 }
+
+/* Wersja mobilna */
+@media (max-width: 600px) {
+    body {
+        padding: 20px 10px;
+    }
+
+    .container {
+        padding: 15px;
+        border-radius: 8px;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+
+    form {
+        flex-direction: column;
+    }
+
+    form button {
+        width: 100%;
+        padding: 12px;
+    }
+
+    li {
+        padding: 10px;
+    }
+
+    li input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+    }
+
+    .delete {
+        padding: 8px 12px;
+    }
+}
