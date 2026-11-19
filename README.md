@@ -23,9 +23,10 @@ do zarządzania codziennymi zadaniami.
 3. Uruchom plik index.html w przeglądarce.
 
 ## Zespół projektowy
-- Imię Nazwisko – Project Manager
-- Imię Nazwisko – Frontend Developer
-- Imię Nazwisko – JavaScript Developer
+- Ivan Maliuk – Project Manager
+- Vladyslav Pankratov – Frontend Developer
+- Heorhi Kheladze – JavaScript Developer
+- Fedir Lisnychenko - Tester
 
 ## Organizacja pracy
 Do zarządzania zadaniami wykorzystujemy Trello.
