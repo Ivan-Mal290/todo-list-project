@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pl"><meta charset="utf-8"><title>Sprawdzenie aplikacji</title>
+<p id="wynik">Sprawdzanie aplikacji…</p><iframe id="aplikacja" title="Aplikacja do sprawdzenia" style="width:900px;height:800px"></iframe>
+<script>
+(async () => {
+  const frame = document.getElementById('aplikacja');
+  const messages = [];
+  const errors = [];
+  let w;
+  let accept = true;
+  let checks = 0;
+  const check = (condition, name) => { if (!condition) throw Error(name); checks++; };
+  const load = () => new Promise(resolve => {
+    frame.onload = () => {
+      w = frame.contentWindow;
+      w.alert = message => messages.push(message);
+      w.confirm = () => accept;
+      w.addEventListener('error', event => errors.push(event.message));
+      resolve();
+    };
+    frame.src = 'index.html?sprawdzenie=' + Math.random();
+  });
+  const data = () => JSON.parse(w.localStorage.getItem('todo-tasks'));
+  const rows = () => w.document.querySelectorAll('li.task');
+  const add = text => { w.document.getElementById('taskInput').value = text; w.document.querySelector('button[type=submit]').click(); };
+  await load();
+  w.localStorage.clear(); await load();
+  check(w.document.querySelector('li.empty').textContent === 'Brak zadań', 'Pusta lista');
+  check(w.document.getElementById('counter').textContent === 'Do zrobienia: 0 / Wszystkich: 0', 'Licznik pustej listy');
+  add('  '); check(messages.pop() === 'Wpisz treść zadania!', 'Pusta treść');
+  add('a'.repeat(101)); check(messages.pop().includes('100'), 'Limit długości');
+  add('  Kupić mleko  '); check(data()[0].text === 'Kupić mleko', 'Przycinanie białych znaków');
+  check(w.document.activeElement.id === 'taskInput', 'Fokus pola');
+  check(w.document.getElementById('taskInput').value === '', 'Czyszczenie pola');
+  add('KUPIĆ MLEKO'); check(data().length === 1, 'Duplikaty');
+  w.document.getElementById('taskInput').value = 'Drugie zadanie';
+  w.document.getElementById('taskInput').dispatchEvent(new w.KeyboardEvent('keydown', {key:'Enter',bubbles:true,cancelable:true}));
+  check(data().length === 2, 'Klawisz Enter');
+  add('a'.repeat(100)); check(data().length === 3, 'Dokładnie 100 znaków');
+  add('<img src=x onerror=alert(1)>'); check(w.document.querySelectorAll('#taskList img').length === 0, 'Bezpieczny tekst');
+  rows()[0].querySelector('span').click(); check(data()[0].done, 'Wykonanie kliknięciem tekstu');
+  check(rows()[0].classList.contains('task--done'), 'Klasa wykonania');
+  check(w.getComputedStyle(rows()[0].querySelector('span')).textDecorationLine === 'line-through', 'Przekreślenie z istniejącego CSS');
+  check(w.document.getElementById('counter').textContent === 'Do zrobienia: 3 / Wszystkich: 4', 'Licznik po zmianie');
+  await load(); check(data()[0].done && data().length === 4, 'Odczyt po ponownym otwarciu');
+  accept = false; rows()[0].querySelector('button').click(); check(data().length === 4, 'Anulowanie usuwania');
+  accept = true; const removed = data()[0].id; rows()[0].querySelector('button').click(); check(!data().some(t=>t.id===removed), 'Usuwanie według ID');
+  rows()[0].querySelector('input').click(); check(data()[0].done, 'Pole wyboru');
+  w.localStorage.setItem('todo-tasks', 'uszkodzone dane'); await load(); check(!!w.document.querySelector('li.empty'), 'Uszkodzony zapis');
+  w.localStorage.removeItem('todo-tasks'); w.localStorage.setItem('tasks', JSON.stringify([{text:'Starsze zadanie',done:true}]));
+  await load(); check(data()[0].text === 'Starsze zadanie' && data()[0].done, 'Przenoszenie starszych danych');
+  check(errors.length === 0, 'Brak błędów wykonania');
+  w.localStorage.clear(); await load();
+  add('Przygotować dokumentację'); add('Sprawdzić działanie aplikacji'); rows()[0].querySelector('span').click();
+  document.getElementById('wynik').textContent = 'WYNIK POZYTYWNY: ' + checks + ' sprawdzenia w rzeczywistym Chrome.';
+})().catch(error => { document.getElementById('wynik').textContent = 'BŁĄD: ' + error.message; });
+</script></html>
