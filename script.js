@@ -9,13 +9,60 @@
 
   // Wczytuje zadania; odrzuca uszkodzone dane i powtarzające się identyfikatory.
   function loadTasks() {
-    // Odczyt danych zostanie podłączony w etapie zapisu.
-    return [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      let storedTasks = JSON.parse(saved || "[]");
+      // Jednorazowo przenosi zadania ze starszej wersji aplikacji.
+      if (saved === null) {
+        const legacy = JSON.parse(localStorage.getItem("tasks") || "[]");
+        if (!Array.isArray(legacy) || !legacy.every((task) =>
+          task && typeof task.text === "string" && typeof task.done === "boolean"
+        )) return [];
+        const firstId = Date.now();
+        storedTasks = legacy.map((task, index) => ({
+          id: firstId + index,
+          text: task.text.trim(),
+          done: task.done,
+          createdAt: getToday(),
+        }));
+      }
+      const ids = new Set();
+      if (!Array.isArray(storedTasks)) return [];
+      const valid = storedTasks.every((task) => {
+        if (
+          !task || !Number.isSafeInteger(task.id) || task.id < 0 ||
+          ids.has(task.id) || typeof task.text !== "string" ||
+          !task.text.trim() || task.text !== task.text.trim() ||
+          Array.from(task.text).length > 100 || typeof task.done !== "boolean" ||
+          typeof task.createdAt !== "string" ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(task.createdAt) ||
+          !Number.isFinite(Date.parse(task.createdAt)) ||
+          new Date(task.createdAt).toISOString().slice(0, 10) !== task.createdAt
+        ) return false;
+        ids.add(task.id);
+        return true;
+      });
+      if (!valid) return [];
+      if (saved === null && storedTasks.length > 0) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(storedTasks));
+        } catch {
+          window.alert("Nie udało się zapisać przeniesionych zadań.");
+        }
+      }
+      return storedTasks;
+    } catch {
+      return [];
+    }
   }
 
   // Zapisuje stan i informuje, jeśli przeglądarka blokuje zapis.
   function saveTasks() {
-    // Zapis danych zostanie podłączony w etapie zapisu.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch {
+      window.alert("Nie udało się zapisać zadań. Po odświeżeniu zmiany mogą zniknąć.");
+    }
   }
 
   // Sprawdza treść, dodaje zadanie i przywraca fokus pola.
@@ -129,7 +176,8 @@
 
   // Pokazuje liczbę niewykonanych zadań i liczbę wszystkich zadań.
   function updateCounter() {
-    // Licznik zostanie podłączony wraz z zapisem danych.
+    const remaining = tasks.filter((task) => !task.done).length;
+    counter.textContent = `Do zrobienia: ${remaining} / Wszystkich: ${tasks.length}`;
   }
 
   // Łączy logikę z wymaganymi elementami HTML po załadowaniu dokumentu.
