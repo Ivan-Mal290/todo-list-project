@@ -10,8 +10,7 @@ Każde zadanie realizujemy na osobnej gałęzi.
 Przykłady:
 - feature/html
 - feature/css
-- feature/add-task
-- feature/delete-task
+- feature/responsive
 
 ## 3. Commity
 Każda zmiana powinna mieć czytelny commit.
