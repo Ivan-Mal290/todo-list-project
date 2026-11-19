@@ -34,7 +34,7 @@ function boot(raw = null, options = {}) {
     this.value = value;
   } };
   const win = { alert: text => alerts.push(text), confirm: () => true };
-  const document = { readyState: 'complete', getElementById: id => ids[id] || null, createElement: () => new Element() };
+  const document = { readyState: 'complete', querySelector: () => null, getElementById: id => ids[id] || null, createElement: () => new Element() };
   vm.runInNewContext(source, { document, window: win, localStorage: storage });
   return { ids, alerts, storage, win, input: ids[inputId], counter: ids.counter || ids[listId].after,
     add(text, enter = false) { ids[inputId].value = text; (enter ? ids[inputId] : button).fire(enter ? 'keydown' : 'click', {key: 'Enter'}); },
