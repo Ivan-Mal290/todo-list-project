@@ -32,6 +32,8 @@ function showTasks() {
         text.textContent = task.text;
 
         const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.setAttribute("aria-label", `Usuń zadanie: ${task.text}`);
         deleteButton.textContent = "Usuń";
         deleteButton.className = "delete";
 
